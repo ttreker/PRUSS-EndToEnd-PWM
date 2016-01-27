@@ -1,0 +1,277 @@
+PRUSS-EndToEnd-PWM Version 0.50
+(C) Copyright 2016 by Christopher C. Mills:
+
+This program is distributed under the terms of the GNU General Public
+License v3 (GPLv3). A copy of this lisence is included with this archive.
+
+THIS PROGRAM HAS VERY LIMITED TESTING - USE AT YOUR OWN RISK.
+
+INTRODUCTION
+--------------------------------------------------------------------------------
+This is a demonstration program of the PRU Subsystem (PRUSS) on the BeagleBone
+Black Rev C (BBB). It is inspired by an interest in the BBB, the PRUSS, and in
+particular by Derek Molloy's excellent introduction to the BBB: "Exploring
+BeagleBone." Hopefully, this project is a useful supplement to the examples
+found in this book. As such a supplement, it assumes the following of the user:
+
+   1) Introductory competence with coding and manipulating the BBB. This could
+      possibly be through the excellent book "Exploring BeagleBone" by Derek
+      Molloy (as was the case of myself) and its accompanying web site.
+   2) Experience compiling and loading device tree overlays.
+   3) Competence in the C language.
+   4) Comfort with learning and developing in the PRUSS assembly language
+      using the PASM assembler.
+   5) Some Linux experience (the more the better, but the Molloy intro is
+      adequate).
+   6) An introductory understanding of the uio_pruss kernel module, including
+      how to access its extended memory buffer (DDR) parameters via the /sys
+      filesystem. (See Molloy and his book's web page for his chapter 13.)
+   7) Access to a PWM source device that can produce a 3.3V pulse. (More on this
+      below)
+   8) An interest in understanding and coding the PRUSS on the BBB.
+
+USEFUL RESOURCES
+--------------------------------------------------------------------------------
+
+   - "Exploring BeagleBone" by Derek Molloy (and its accompanying web site)
+   - Texas Instruments "AM335X Sitara Processors" (Rev. L)
+   - Texas Instruments "AM335X PRU-ICSS Reference Guide" (Rev. A)
+   - The am335x-pru-package on Github (source code and docs a great reference)
+   - prudebug-bbb on Github (A PRUSS debugger authored by Steven Anderson and
+     improved by myself, Christopher C. Mills-- improvements ongoing)
+
+DESCRIPTION
+--------------------------------------------------------------------------------
+This is a demonstration of the PRUSS operating in the framework of an end-to-end
+application. The intent is to go one step beyond a simple demonstation of the
+PRUSS by using a TCP/IP client to download data via a server running on the
+BeagleBone Black that also manages the PRUSS. It intentionally doesn't attempt
+to do anything too fancy so as to remain reasonably easy to understand. The
+PRUSS captures data from an input pin attached to a pulse width modulator (PWM)
+source. A sample by the PRUSS consists of a pair of 32 bit words: one holding a
+high count, and the other holding a low count of a single pulse.
+
+IMPORTANT: To run the program, it is necessary to have access to a PWM
+           generator of some sort, configured for a BBB *safe* input voltage
+           (3.3V). There is a function generator kit called the "FG085 miniDDS
+           Function Generator" available from multiple sources (needs to be
+           built and has a maximum frequency for PWM of around 10KHz). However,
+           another BBB, an Arduino, or a user-built circuit could provide the
+           source. These latter approaches could have the added advantage of
+           running at a much higher frequency (10MHz or greater).
+
+           This PWM source is assumed to exist for this code and further
+           details about configuring this source is beyond the scope of the
+           information in this demo.
+
+There are a couple of useful things demonstrated in this project:
+
+   - PRU-to-PRU interrupts
+   - Use of the PRUSS Scratchpad register bank on the broadside bus to rapidly
+     exchange data between PRUs, circumventing the need to use slow Shared
+     Memory.
+
+The use of PRU-to-PRU interrupts and the scratchpad are not documented in
+Molloy. Both of these may be useful in extracting every ounce of speed out of
+the PRUSS. This project is a good starting point to test PRUSS throughput.
+
+Device Tree Overlay:
+
+   The device tree overlay file, PWM-PRU-ETE.dts, used on this project is
+   derived from the one Molloy uses in the Chapter 13 ADC example (on the
+   web). It has two added outputs from that example; one was added to PRU 1
+   for debugging its operation with a scope. However, only the one input on
+   PRU 0 is used in this project. The other outputs were left available to
+   be used for future expansion or for debugging with a scope.
+
+   Also, note that HDMI needs to be disabled for this example. See Molloy
+   for details on how to go about doing this. Check out his web site for
+   updated details on this topic.
+
+In addition to a Makefile, a PASM header file, and a device tree overlay
+() and its build script, this demonstration consists
+primarily of four modules:
+
+   pruss-ete.c  (server and PRUSS manager)
+   client-ete.c (client compilable on any system including the BBB)
+   data-pru0.p  (PRU 0 code for PWM sample capturing)
+   ddr-pru1.p   (PRU 1 code for dumping samples to DDR) 
+
+The DDR buffer is setup by the uio_pruss kernel module. This module is loaded by
+default upon BBB boot and this buffer (called Extended RAM by uio_pruss
+nomenclature) should be of adequate size by default for this demo. Molloy
+describes how to expand this on his Chapter 13 web page if that is desired.
+
+The following describes the role in a bit more detail of each of the above
+four modules:
+
+pruss-ete:
+   1) Determines DDR buffer size and calculates sample count based on this.
+   2) Determines DDR buffer physical address.
+   3) Configures the PRUSS.
+   4) Writes the DDR buffer parameters into PRUSS Shared Memory.
+   5) Starts the PRUSS (PRU 1, then PRU 0).
+   6) Waits for PRUSS sampling to complete.
+
+PRU 1:
+   1) Waits for an interrupt from PRU 0 signalling that a
+      pulse-width sample is ready in the scratchpad.
+   2) When interrupt is received, transfers scratchpad
+      data (the sample) to its register file.
+   3) Writes the sample from its registers to the next location in the DDR
+      buffer.
+   4) Decrements the sample count and halts if 0, after triggering a host
+      interrupt signalling completion.
+   5) Otherwise, it goes back to (1) above and repeats.
+
+PRU 0:
+   1) Syncs itself to the first high-going pulse.
+   2) Counts from 0 (count tick duration undetermined) until pulse goes
+      low.
+   3) Counts from 0 until pulse goes high.
+   4) Passes counts into scratchpad bank.
+   5) Triggers interrupt to PRU 1.
+   6) Decrements the sample count and halts if 0.
+
+pruss-ete (continues):
+   7) Receives interrupt from PRU 1 signaling completion.
+   8) Shuts down the PRUSS.
+   9) Sets itself up as a TCP server and waits for a connection. The
+      port was passed on the command line.
+   10) Immediately upon connection established by the client (client-ete) it
+       sends the DDR buffer size to the client.
+   11) Waits for a "GO" string from the client.
+   12) Upon receipt of the "GO" string, dumps the DDR buffer to the
+       TCP stream.
+   13) It then shuts down.
+
+client-ete:
+   1) Connects to the server: Its port was passed on its command line.
+   2) Immediately reads the stream for the sample data size.
+   3) Upon receipt of the size, sends a "GO" string to the server.
+   4) Reads the resulting stream of data from the server-- formatting it
+      and outputting it to a file.
+   5) It then shuts down.
+
+Things to note about this operation:
+
+   1) PRU 0 counts its samples by counting pairs of high/low transitions on its
+      input pin. No input, no count and so the PRUSS operation never completes.
+   2) Likewise, PRU 1 decrements its sample count by counting interrupts from
+      PRU 0, so no input to PRU 0 means it will hang also, never interrupting
+      the pruss-ete module, which will then also hang.
+   3) The sample count used is derived from how big the DDR buffer is: the
+      bigger the buffer, the greater the sample count:
+
+         sample count = buffer size/8
+
+   4) Beware: how long it takes to complete not only depends on the number of
+      samples but the frequency of the PWM. If a slow frequency PWM is used the
+      sampling could take a long time.
+   5) The fastest PWM frequency is undetermined as of this writing, but in
+      theory this code could support a pretty high frequency PWM (say 10Mhz or
+      more). This module is designed to test this throughput. For initial
+      testing, I used a 38 micro secs (~26KHz) pulse width. (As of this
+      writing a test to determine highest throughput of this code is planned,
+      but has not yet been performed.)
+   6) A quirk of operation is that the client should *not* be started until
+      the server has finished the PRUSS operation and has configured itself as
+      a TCP server waiting on a port. The reason for this annoyance was to
+      keep the handshaking between client and server to a minimum to keep
+      the code reasonably easy to follow.
+
+Practical Use:
+
+   This code may actually be useful to gather stats on a PWM device. This
+   could be useful, for instance, to determine the severity of jitter. You
+   could:
+
+   1) Run the server on a PWM source.
+   2) Run the client on a Windows PC and connect to the server to dump the data.
+   3) Analyze the data in a spreadsheet for variance or graph the deviations
+      against time.
+
+RELEASE NOTES for pruss-ete
+--------------------------------------------------------------------------------
+Version 0.50: Initial Project Creation
+	
+CONTRIBUTORS
+--------------------------------------------------------------------------------
+Christopher C. Mills ---- Linux C and PRUSS  source modules; design
+Ram Radhakrishnan ------- PWM circuit, Windows C client; design
+
+BUILD
+--------------------------------------------------------------------------------
+
+1) Compile and install the device tree overlay supplied (PWM-PRU-ETE) with the
+   following command in the project directory:
+
+      ./build-pwm-dts
+
+   This will result in the file
+
+      PWM-PRU-ETE-00A0.dtbo
+
+   which can then be installed in the usual manner. Installation of this dto
+   as well as the unloading of any competing dtos is beyond the scope of
+   these instructions.
+
+2) Be certain to test that this device tree overlay is installed and that the
+   pins are configured as expected. (See Molloy for further description)
+3) Run:
+
+      make
+
+   in the project directory to create both the client and server executables.
+   Note: the client can be compiled on another system if desired. Its gcc
+   parameters can be determined from the Makefile.
+
+The make will produce the following two executables:
+
+   pruss-ete (the server and PRUSS manager)
+   client-ete (the downloading client)
+
+It will also produce the PRU binaries:
+
+   data-pru0.bin (PRU 0 PWM sampling code)
+   ddr-pru1.bin  (PRU 1 DDR buffering code)
+
+Note: This module must be linked to the prussdrv library which is installed
+      on the BBB via the am335x_pru_package. Because of this, no action
+      probably needs to be taken to ensure the project's Makefile runs. If
+      there is a problem, load the package via apt-get. This package is also
+      available for download on Github.
+
+
+INSTALLATION
+--------------------------------------------------------------------------------
+Other than the device tree overlay described above, no install is required
+
+USAGE
+--------------------------------------------------------------------------------
+Note: The server (pruss-ete) must be run with root privileges.
+
+1) Safely configure a PWM source and connect it to P9.28 (double check the pin
+   configuration and source voltage if you care about your BBB!)
+2) Run:
+
+     pruss-ete <port number>
+
+   where <port number> is any desired unused port (maybe arbitrarily 51717).
+3) Wait for the PRUSS work to complete. This is indicated by the message:
+
+      All Samples Dumped. Received event count...
+
+   Then the server will have started.
+4) When the server has started, start the client with:
+
+     client-ete <port number>
+
+   where the port number is the same as for the server.
+5) The client and server should quickly complete and shutdown.
+6) Check for the file
+
+      tcpcap.dat
+
+   in the client's startup folder.
+    

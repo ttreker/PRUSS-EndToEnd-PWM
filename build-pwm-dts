@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "Compiling the PWM-PRU-ETE overlay from .dts to .dtbo"
+dtc -O dtb -o PWM-PRU-ETE-00A0.dtbo -b 0 -@ PWM-PRU-ETE.dts
