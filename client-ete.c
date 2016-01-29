@@ -16,7 +16,7 @@ typedef struct sample_st
 void error(const char *msg)
 {
   perror(msg);
-  exit(0);
+  exit(1);
 }
 
 int main(int argc, char *argv[])
@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 
   if (argc < 3) {
     fprintf(stderr,"usage %s hostname port\n", argv[0]);
-    exit(0);
+    exit(1);
   }
 
   portno = atoi(argv[2]);
@@ -40,8 +40,8 @@ int main(int argc, char *argv[])
     error("ERROR opening socket");
   server = gethostbyname(argv[1]);
   if (server == NULL) {
-    fprintf(stderr,"ERROR, no such host\n");
-    exit(0);
+    fprintf(stderr,"ERROR, no such host: %s\n\n", argv[1]);
+    exit(1);
   }
 
   bzero((char *) &serv_addr, sizeof(serv_addr));
@@ -56,9 +56,8 @@ int main(int argc, char *argv[])
   n = read(sockfd,&count,4);
   if (n < 0)
   {
-    error("ERROR reading count from socket");
     close(sockfd);
-    exit(1); 
+    error("ERROR reading count from socket");
   }
   else
   {
@@ -68,18 +67,16 @@ int main(int argc, char *argv[])
 
   if((buffer = malloc(count)) == NULL)
   {
-    error("ERROR allocating buffer");
     close(sockfd);
-    exit(1); 
+    error("ERROR allocating buffer");
   }
 
   n = write(sockfd,"GO",strlen("GO"));
   if (n < 0) 
   {
-    error("ERROR writing command GO to socket");
     close(sockfd);
     free(buffer);
-    exit(1); 
+    error("ERROR writing command \"GO\" to socket");
   }
 
   int cnt = 0;
@@ -90,28 +87,53 @@ int main(int argc, char *argv[])
     printf("Bytes read: 0x%X\n", n);
     if (n < 0) 
     {
-      error("ERROR reading data stream from socket");
       close(sockfd);
       free(buffer);
-      exit(1); 
+      error("ERROR reading data stream from socket");
     }
     cnt += n;
     bptr += n;
 
   } while (n > 0);
 
+  n = write(sockfd,"DONE",strlen("DONE"));
+  if (n < 0) 
+  {
+    close(sockfd);
+    free(buffer);
+    error("ERROR writing acknowledgment \"DONE\" to socket");
+  }
+
   FILE *outfd;
   outfd = fopen("./tcpcap.dat","w");
+  if(outfd == NULL)
+  {
+    close(sockfd);
+    free(buffer);
+    error("ERROR opening output file tcpcap.dat");
+  }
+
+  int fpfret, fpftot = 0;
   samples = (sample_t *)buffer;
   printf("\nSample buffer index 5: %X  %X\n\n", samples[5].low, samples[5].high);
   numSamps = count/sizeof(sample_t);
   for(i=0; i<numSamps; i++)
   {
-    fprintf(outfd, "%5d: 0x%X 0x%X\n",i, samples[i].low, samples[i].high);
+    fpfret = fprintf(outfd, "%5d: 0x%X 0x%X\n",i, samples[i].low, samples[i].high);
+    if(fpfret < 0)
+    {
+       close(sockfd);
+       free(buffer);
+       fclose(outfd);
+       fprintf(stderr,"Failed to write all data to file. %d bytes were written\n\n",fpftot);
+    }
+    else
+       fpftot+= fpfret;
   }
+
+  close(sockfd);
+  free(buffer);
   fclose(outfd);
 
-  free(buffer);
-  close(sockfd);
   return 0;
 }
