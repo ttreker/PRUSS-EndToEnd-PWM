@@ -24,7 +24,7 @@ found in this book. As such a supplement, it assumes the following of the user:
    5) Some Linux experience (the more the better, but the Molloy intro is
       adequate).
    6) An introductory understanding of the uio_pruss kernel module, including
-      how to access its extended memory buffer (DDR) parameters via the /sys
+      how to access its external memory buffer (DDR) parameters via the /sys
       filesystem. (See Molloy and his book's web page for his chapter 13.)
    7) Access to a PWM source device that can produce a 3.3V pulse. (More on this
       below)
@@ -56,9 +56,9 @@ IMPORTANT: To run the program, it is necessary to have access to a PWM
            (3.3V). There is a function generator kit called the "FG085 miniDDS
            Function Generator" available from multiple sources (needs to be
            built and has a maximum frequency for PWM of around 10KHz). However,
-           another BBB, an Arduino, or a user-built circuit could provide the
-           source. These latter approaches could have the added advantage of
-           running at a much higher frequency (10MHz or greater).
+           another BBB, a microcontroller, or a user-built circuit could
+           provide the source. These latter approaches could have the added
+           advantage of running at a much higher frequency (10MHz or greater).
 
            This PWM source is assumed to exist for this code and further
            details about configuring this source is beyond the scope of the
@@ -98,7 +98,7 @@ primarily of four modules:
    ddr-pru1.p   (PRU 1 code for dumping samples to DDR) 
 
 The DDR buffer is setup by the uio_pruss kernel module. This module is loaded by
-default upon BBB boot and this buffer (called Extended RAM by uio_pruss
+default upon BBB boot and this buffer (called External RAM by uio_pruss
 nomenclature) should be of adequate size by default for this demo. Molloy
 describes how to expand this on his Chapter 13 web page if that is desired.
 
@@ -182,9 +182,9 @@ Things to note about this operation:
 
 Practical Use:
 
-   This code may actually be useful to gather stats on a PWM device. This
-   could be useful, for instance, to determine the severity of jitter. You
-   could:
+   Although not intended as such by any stretch of the imagination, this code
+   could actually be useful to gather stats on a PWM device. This could be
+   useful, for instance, to determine the severity of jitter. You could:
 
    1) Run the server on a PWM source.
    2) Run the client on a Windows PC and connect to the server to dump the data.

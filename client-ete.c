@@ -7,16 +7,20 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 
+// Struct to hold a sample
 typedef struct sample_st
 {
   uint32_t low;
   uint32_t high;
 } sample_t;
 
-void error(const char *msg)
+// Prints and error message passed in
+// and appends an errno string to the
+// end (perror(); exits with failure.
+void syserror(const char *msg)
 {
   perror(msg);
-  exit(0);
+  exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[])
@@ -26,92 +30,143 @@ int main(int argc, char *argv[])
   struct sockaddr_in serv_addr;
   struct hostent *server;
   unsigned char *buffer, *bptr;
-  sample_t *samples;
   uint16_t readResult;
 
+  // Check for proper number of arguments
   if (argc < 3) {
-    fprintf(stderr,"usage %s hostname port\n", argv[0]);
-    exit(0);
+    fprintf(stderr,"\nusage %s hostname port\n", argv[0]);
+    exit(EXIT_FAILURE);
   }
 
+  // Extract the port argument and open Internet socket
   portno = atoi(argv[2]);
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) 
-    error("ERROR opening socket");
-  server = gethostbyname(argv[1]);
-  if (server == NULL) {
-    fprintf(stderr,"ERROR, no such host\n");
-    exit(0);
+    syserror("\nERROR opening socket");
+
+  // Look up the host
+  char * hoststr = argv[1];
+  server = gethostbyname(hoststr);
+  if (server == NULL)
+  {
+    close(sockfd);
+    fprintf(stderr,"\nERROR, no such host: %s\n\n", argv[1]);
+    exit(EXIT_FAILURE);
   }
 
+  // Zero out the server address structure, then populate it
+  // with required parameters
   bzero((char *) &serv_addr, sizeof(serv_addr));
   serv_addr.sin_family = AF_INET;
-  bcopy((char *)server->h_addr, 
-      (char *)&serv_addr.sin_addr.s_addr,
-      server->h_length);
+  bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr,
+        server->h_length);
   serv_addr.sin_port = htons(portno);
-  if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
-    error("ERROR connecting");
 
+  // Connect to the host
+  printf("\nConnecting to host %s...\n");
+  if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
+  {
+    close(sockfd);
+    syserror("\nERROR connecting");
+  }
+  printf("Connection established\n\n");
+
+  // Host sends sample count immediately upon connection, so read it.
   n = read(sockfd,&count,4);
   if (n < 0)
   {
-    error("ERROR reading count from socket");
     close(sockfd);
-    exit(1); 
+    syserror("\nERROR reading count from socket");
   }
-  else
+  else // Got count
   {
-    printf("\n");
-    printf("Count is: 0x%X\n", count);
+    printf("Sample count is: 0x%X\n\n", count);
   }
 
+  // Allocate an input buffer
   if((buffer = malloc(count)) == NULL)
   {
-    error("ERROR allocating buffer");
     close(sockfd);
-    exit(1); 
+    syserror("\nERROR allocating buffer");
   }
 
+  // Tell the host to "GO"
   n = write(sockfd,"GO",strlen("GO"));
   if (n < 0) 
   {
-    error("ERROR writing command GO to socket");
     close(sockfd);
     free(buffer);
-    exit(1); 
+    syserror("\nERROR writing command \"GO\" to socket");
   }
 
+  // Read the data in a loop, one chunk at a time, until all 
+  // samples have been read.
   int cnt = 0;
+  int countleft = count;
   bptr = buffer;
+  printf("Reading the samples...\n");
   do
   {
-    n = read(sockfd,bptr,count);
+    n = read(sockfd,bptr,countleft);
     printf("Bytes read: 0x%X\n", n);
     if (n < 0) 
     {
-      error("ERROR reading data stream from socket");
       close(sockfd);
       free(buffer);
-      exit(1); 
+      syserror("\nERROR reading data stream from socket");
     }
+    countleft -= n;
     cnt += n;
     bptr += n;
 
-  } while (n > 0);
+  } while (cnt < count);
+  printf("All samples read successfully\n\n");
 
+  // Tell host all data received so it can close its socket.
+  n = write(sockfd,"DONE",strlen("DONE"));
+  if (n < 0) 
+  {
+    close(sockfd);
+    free(buffer);
+    syserror("\nERROR writing acknowledgment \"DONE\" to socket");
+  }
+
+  // Prepare to dump the buffer to a file by opening that file.
   FILE *outfd;
-  outfd = fopen("./tcpcap.dat","w");
-  samples = (sample_t *)buffer;
-  printf("\nSample buffer index 5: %X  %X\n\n", samples[5].low, samples[5].high);
+  const char * outfile = "./tcpcap.dat";
+  outfd = fopen(outfile,"w");
+  if(outfd == NULL)
+  {
+    close(sockfd);
+    free(buffer);
+    syserror("\nERROR opening output file tcpcap.dat");
+  }
+
+  // Dump out the samples to a formatted ascii file in hex
+  int fpfret, fpftot = 0;
+  sample_t *samples = (sample_t *)buffer;
+  printf("Low/High sample values at buffer index 5: %X  %X\n\n", samples[5].low, samples[5].high);
   numSamps = count/sizeof(sample_t);
+  printf("Writing samples to file %s...\n", outfile);
   for(i=0; i<numSamps; i++)
   {
-    fprintf(outfd, "%5d: 0x%X 0x%X\n",i, samples[i].low, samples[i].high);
+    fpfret = fprintf(outfd, "%5d: 0x%X 0x%X; Sum=0x%X\n",i, samples[i].low, samples[i].high, samples[i].low + samples[i].high);
+    if(fpfret < 0)
+    {
+       close(sockfd);
+       free(buffer);
+       fclose(outfd);
+       fprintf(stderr,"\nFailed to write all data to file. %d bytes were written\n\n",fpftot);
+       exit(EXIT_FAILURE);
+    }
+    else
+       fpftot+= fpfret;
   }
+  printf("All samples written. Program complete.\n\n");
+
+  close(sockfd);
+  free(buffer);
   fclose(outfd);
 
-  free(buffer);
-  close(sockfd);
   return 0;
 }

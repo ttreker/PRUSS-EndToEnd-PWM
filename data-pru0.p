@@ -14,17 +14,16 @@ SBCO  r0, CONST_PRUCFG, 4, 4
 // field to 0x0100.  This will make C28 point to 0x00010000 (PRU shared RAM).
 MOV   r0, 0x00000100
 MOV   r1, CTPPR_0_P0
-ST32  r0, r1
+ST32  r0, r1         // (Note: STXX instructions are macros from the header)
 
-//Load 2 values from shared RAM into Registers R10/R11
+// Load 2 values from shared RAM into Registers R10/R11
+// Only the R11, the sample count, is used by PRU 0 
 LBCO  r10, CONST_PRUSHAREDRAM, 0, 8
-
-// Debug: Increase  the sample count
-// ADD   r11, r11, 0xF0
 
 // Low count is in R0, High count is in R1. Zero them.
 ZERO  &r0, 8
 
+// Sync up on a clean low-to-high transition
 WBC   r31,3
 WBS   r31,3
 
@@ -44,10 +43,6 @@ QBBC  CNTLOOPLOW, r31, 3
 XOUT  10, &r0, 8
 MOV   r31.b0, PRU0_PRU1_INTERRUPT + 16
 
-// Debug: Save last sent values
-MOV r6, r0
-MOV r7, r1
-
 // Low count is in R0, High count is in R1. Zero them.
 ZERO  &r0, 8
 
@@ -56,6 +51,3 @@ SUB r11, r11, 1
 
 QBNE CNTLOOPHIGH, r11, 0
 HALT
-
-
-
