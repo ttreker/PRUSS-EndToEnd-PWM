@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
     cnt += n;
     bptr += n;
 
-  } while (n > 0);
+  } while (n > 0 && cnt < count);
 
   n = write(sockfd,"DONE",strlen("DONE"));
   if (n < 0) 

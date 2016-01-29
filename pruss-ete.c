@@ -321,7 +321,7 @@ int main (int argc, char **argv)
   // Now start the server; wait; dump; return here and exit
   printf("Starting the server...\n");
   doServer(portno);
-  printf("Data successfully dumped. Program ending.");
+  printf("Data successfully dumped. Program ending.\n\n");
 
   return EXIT_SUCCESS;
 }
