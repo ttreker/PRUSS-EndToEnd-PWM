@@ -221,6 +221,13 @@ void doServer(int portno)
   serv_addr.sin_addr.s_addr = INADDR_ANY;
   serv_addr.sin_port = htons(portno);
 
+  // Prevent TIME_WAIT and ensure immediate port reuse after termination
+  int on = 1;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on) ))
+  {
+    close(sockfd);
+    error("ERROR on setting socket option");
+  }
   // Bind the socket to the port
   if (bind(sockfd, (struct sockaddr *) &serv_addr,
         sizeof(serv_addr)) == -1)
