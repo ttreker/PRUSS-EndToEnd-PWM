@@ -35,7 +35,7 @@
 void error(const char *msg)
 {
   perror(msg);
-  exit(0);
+  exit(EXIT_FAILURE);
 }
 
 // Short function to load a single unsigned int from a sysfs entry
@@ -43,7 +43,7 @@ unsigned int readFileValue(char filename[]){
    FILE* fp;
    unsigned int value = 0;
    fp = fopen(filename, "rt");
-   if(fp == NULL)
+   if(fp == NULL) // Indicate the open failure by returning 0
       return 0;
    fscanf(fp, "%x", &value);
    fclose(fp);
@@ -65,10 +65,13 @@ int dumpSamples(int newsockfd, unsigned int dataSize) {
   off_t targetMemBlock;
   off_t targetMemOffset;
 
+  // Get the address of the uio_pruss extended RAM buffer
+  // Mask it off for a memory block start address physical address in /dev/mem
+  // and an offset value referencing the start of the buffer.
   addr = readFileValue(MMAP1_LOC "addr");
   if(addr == 0)
   {
-    fprintf(stderr, "ERROR failed to read buffer address\n");
+    fprintf(stderr, "\nERROR failed to read buffer address\n");
     fflush(stderr);
     return -1;
   }
@@ -76,39 +79,43 @@ int dumpSamples(int newsockfd, unsigned int dataSize) {
   targetMemBlock = target & ~MAP_MASK;
   targetMemOffset = target & MAP_MASK;
 
+  // Open /dev/mem so it can be mapped
   if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1)
   {
-    fprintf(stderr, "Failed to open /dev/mem!\n");
+    fprintf(stderr, "\nFailed to open /dev/mem!\n");
     fflush(stderr);
     return -1;
   }
 
+  // Map the physical memory block location to a local process pointer
   map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, targetMemBlock);
   if(map_base == (void *) -1) 
   {
-    fprintf(stderr,"Failed to map base address of uio_pruss extended RAM buffer\n");
+    fprintf(stderr,"\nFailed to map base address of uio_pruss extended RAM buffer\n");
     fflush(stderr);
     close(fd);
     return -1;
   }
 
+  // Setup a pointer to point to the buffer start location then use it to write
+  // the data to the socket.
   int i=0;
   int n;
-
   virt_addr = map_base + targetMemOffset;
   n = write(newsockfd,virt_addr,dataSize);
   if(n == -1)
   {
-    fprintf(stderr, "ERROR data dump socket write failed\n");
+    fprintf(stderr, "\nERROR data dump socket write failed\n");
     fflush(stderr);
     close(fd);
     return -1;
   }
   printf("Bytes written: 0x%X\n", n);
 
+  // Done writing all data so free up the pointer
   if(munmap(map_base, MAP_SIZE) == -1)
   {
-    fprintf(stderr,"Failed to unmap memory");
+    fprintf(stderr,"\nFailed to unmap memory\n");
     fflush(stderr);
     close(fd);
     return -1;
@@ -133,7 +140,7 @@ int clientDance(int newsockfd)
   dataSize = readFileValue(MMAP1_LOC "size");
   if(dataSize == 0)
   {
-     fprintf(stderr, "ERROR reading buffer size");
+     fprintf(stderr, "\nERROR reading buffer size\n");
      return -1;
   }
 
@@ -141,7 +148,7 @@ int clientDance(int newsockfd)
   n = write(newsockfd,&dataSize,4);
   if (n < 0)
   {
-    fprintf(stderr, "ERROR writing to socket");
+    fprintf(stderr, "\nERROR writing to socket\n");
     return -1;
   }
   else // Wait for the "GO" command
@@ -150,7 +157,7 @@ int clientDance(int newsockfd)
     n = read(newsockfd,buffer,16);
     if (n < 0)
     {
-      fprintf(stderr, "ERROR reading \"GO\" command from socket (from client)");
+      fprintf(stderr, "\nERROR reading \"GO\" command from socket (from client)\n");
       return -1;
     }
     else if (!strcmp( "GO", buffer)) // If we got "GO" then dump samples
@@ -159,7 +166,7 @@ int clientDance(int newsockfd)
     }
     else
     {
-      fprintf(stderr, "ERROR no \"GO\" command; just garbage\n");
+      fprintf(stderr, "\nERROR no \"GO\" command; just garbage\n");
       return -1;
     }
   }
@@ -168,7 +175,7 @@ int clientDance(int newsockfd)
   // value. If it  was not 0 then return with an error
   if(dsret)
   {
-    fprintf(stderr, "ERROR dumping samples failed\n");
+    fprintf(stderr, "\nERROR dumping samples failed\n");
     return -1;
   }
 
@@ -177,7 +184,7 @@ int clientDance(int newsockfd)
   n = read(newsockfd,buffer,16);
   if (n < 0)
   {
-    fprintf(stderr, "ERROR reading \"DONE\" command from socket (from client)");
+    fprintf(stderr, "\nERROR reading \"DONE\" command from socket (from client)\n");
     return -1;
   }
   else if (!strcmp( "DONE", buffer)) // If got "DONE", our client dance is done
@@ -186,7 +193,7 @@ int clientDance(int newsockfd)
   }
   else
   {
-    fprintf(stderr, "ERROR no \"DONE\" command; just garbage\n");
+    fprintf(stderr, "\nERROR no \"DONE\" command; just garbage\n");
     return -1;
   }
 
@@ -212,35 +219,38 @@ void doServer(int portno)
   // Get a handle on a socket
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) 
-    error("ERROR opening socket");
+    error("\nERROR opening socket");
 
   // Initialize the server structure that specifies, amongy other things,
-  // the port number.
+  // the port number and the interface (which is any in this case).
   bzero((char *) &serv_addr, sizeof(serv_addr));
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = INADDR_ANY;
   serv_addr.sin_port = htons(portno);
 
   // Prevent TIME_WAIT and ensure immediate port reuse after termination
+  // Without this call the port will not be available for reuse until
+  // after a TIME_WAIT period, which is often several minutes.
   int on = 1;
   if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on) ))
   {
     close(sockfd);
-    error("ERROR on setting socket option");
+    error("\nERROR on setting socket option");
   }
-  // Bind the socket to the port
+
+  // Bind the socket to the port/interfaces
   if (bind(sockfd, (struct sockaddr *) &serv_addr,
         sizeof(serv_addr)) == -1)
   {
     close(sockfd);
-    error("ERROR on socket binding");
+    error("\nERROR on socket binding");
   }
 
   // Start the server listening for connections
   if(listen(sockfd,5) == -1)
   {
     close(sockfd);
-    error("ERROR on socket listen:");
+    error("\nERROR on socket listen");
   }
 
   // Accept an incoming connection
@@ -249,16 +259,16 @@ void doServer(int portno)
   if (newsockfd == -1)
   {
      close(sockfd);
-     error("ERROR on connection accept");
+     error("\nERROR on connection accept");
   }
   else // No errors so dance with client to dump data
   {
     int cdret = clientDance(newsockfd);
-    close(sockfd);
-    close(newsockfd);
+    close(sockfd);     // Close the sockets
+    close(newsockfd);  // good or bad
     if(cdret)
     {
-      error("ERROR during clientDance()");
+      error("\nERROR during clientDance()");
     }
   }
 
@@ -279,7 +289,7 @@ int main (int argc, char **argv)
   // Check for port
   if (argc < 2)
   {
-    fprintf(stderr,"ERROR no port provided\n");
+    fprintf(stderr,"\nERROR no port provided\n");
     abort();
   }
 
@@ -294,13 +304,14 @@ int main (int argc, char **argv)
   uint32_t  uioBufMetaD[2];
   uioBufMetaD[0] = readFileValue(MMAP1_LOC "addr");
   uint32_t bufSize = readFileValue(MMAP1_LOC "size");
-  printf("The DDR External Memory pool has location: 0x%x and size: 0x%x bytes\n", uioBufMetaD[0], bufSize);
-  uioBufMetaD[1] = bufSize/8;
-  printf("-> this space has capacity to store upto %d (%x) samples\n", uioBufMetaD[1], uioBufMetaD[1]);
+  uioBufMetaD[1] = bufSize/8; // Two 32 bit words make up a sample
+  printf("\nThe DDR External Memory buffer is at physical location: 0x%x\n", uioBufMetaD[0]);
+  printf("The DDR External Memory buffer has a size of:           0x%x (%d) bytes\n", bufSize, bufSize);
+  printf("This space has capacity to store upto:                  0x%x (%d) samples\n\n", uioBufMetaD[1], uioBufMetaD[1]);
 
   // Allocate and initialize memory
-  prussdrv_init ();
-  prussdrv_open (PRU_EVTOUT_0);
+  prussdrv_init ();              // Routine only zeros out an internal data structure
+  prussdrv_open (PRU_EVTOUT_0);  // Populates the internal structure with pointers and params
 
   // Write uio_pruss kernel buffer metadata to PRUSS shared memory
   prussdrv_pru_write_memory(PRUSS0_SHARED_DATARAM, 0, uioBufMetaD, 8);  
@@ -308,16 +319,17 @@ int main (int argc, char **argv)
   // Map the PRU's interrupts
   prussdrv_pruintc_init(&pruss_intc_initdata);
 
-  // Load and execute the PRU program on the PRU
-  prussdrv_exec_program (PRU1, "./ddr-pru1.bin");
+  // Load and execute the PRU programs on each PRU
+  prussdrv_exec_program (PRU1, "./ddr-pru1.bin");  // PRU1 must be loaded first
   prussdrv_exec_program (PRU0, "./data-pru0.bin");
-  printf("PRU0 and PRU1 are now running\n");
+  printf("PRU0 and PRU1 are now running...\n");
 
-  // Wait for event completion from PRU, returns the PRU_EVTOUT_0 number
+  // Wait for event completion from PRUSS:
+  // PRU1 signals PRU_EVTOUT_0 (interrupt)
+  // PRU0 will just halt.
   int n = prussdrv_pru_wait_event (PRU_EVTOUT_0);
   printf("All Samples Dumped. Received event count %d.\n\n", n);
   prussdrv_pru_clear_event (PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
-
 
   // Disable PRU and close memory mappings 
   prussdrv_pru_disable(PRU0);
@@ -325,7 +337,7 @@ int main (int argc, char **argv)
 
   prussdrv_exit ();
 
-  // Now start the server; wait; dump; return here and exit
+  // Now start the server; wait for client; dump data; return here and exit
   printf("Starting the server...\n");
   doServer(portno);
   printf("Data successfully dumped. Program ending.\n\n");
