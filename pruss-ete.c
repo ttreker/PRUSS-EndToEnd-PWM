@@ -32,7 +32,7 @@
 // This routine is used to report system errors and then abort (i.e. errors
 // that set errno).
 //
-void error(const char *msg)
+void syserror(const char *msg)
 {
   perror(msg);
   exit(EXIT_FAILURE);
@@ -60,7 +60,6 @@ int dumpSamples(int newsockfd, unsigned int dataSize) {
   void *map_base, *virt_addr;
   unsigned long readResult, writeval;
   unsigned int addr;
-  unsigned int numberOutputSamples = dataSize / 2;
   off_t target;
   off_t targetMemBlock;
   off_t targetMemOffset;
@@ -102,6 +101,7 @@ int dumpSamples(int newsockfd, unsigned int dataSize) {
   int i=0;
   int n;
   virt_addr = map_base + targetMemOffset;
+  printf("Sample  5 (low high): 5x%X 5x%X\n\n", ((uint32_t *)virt_addr)[10], ((uint32_t *)virt_addr)[11]);
   n = write(newsockfd,virt_addr,dataSize);
   if(n == -1)
   {
@@ -219,7 +219,7 @@ void doServer(int portno)
   // Get a handle on a socket
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) 
-    error("\nERROR opening socket");
+    syserror("\nERROR opening socket");
 
   // Initialize the server structure that specifies, amongy other things,
   // the port number and the interface (which is any in this case).
@@ -235,7 +235,7 @@ void doServer(int portno)
   if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on) ))
   {
     close(sockfd);
-    error("\nERROR on setting socket option");
+    syserror("\nERROR on setting socket option");
   }
 
   // Bind the socket to the port/interfaces
@@ -243,14 +243,14 @@ void doServer(int portno)
         sizeof(serv_addr)) == -1)
   {
     close(sockfd);
-    error("\nERROR on socket binding");
+    syserror("\nERROR on socket binding");
   }
 
   // Start the server listening for connections
   if(listen(sockfd,5) == -1)
   {
     close(sockfd);
-    error("\nERROR on socket listen");
+    syserror("\nERROR on socket listen");
   }
 
   // Accept an incoming connection
@@ -259,7 +259,7 @@ void doServer(int portno)
   if (newsockfd == -1)
   {
      close(sockfd);
-     error("\nERROR on connection accept");
+     syserror("\nERROR on connection accept");
   }
   else // No errors so dance with client to dump data
   {
@@ -268,7 +268,7 @@ void doServer(int portno)
     close(newsockfd);  // good or bad
     if(cdret)
     {
-      error("\nERROR during clientDance()");
+      syserror("\nERROR during clientDance()");
     }
   }
 
@@ -328,7 +328,7 @@ int main (int argc, char **argv)
   // PRU1 signals PRU_EVTOUT_0 (interrupt)
   // PRU0 will just halt.
   int n = prussdrv_pru_wait_event (PRU_EVTOUT_0);
-  printf("All Samples Dumped. Received event count %d.\n\n", n);
+  printf("All samples written to DDR buffer. (UIO interrupt count: %d).\n\n", n);
   prussdrv_pru_clear_event (PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
   // Disable PRU and close memory mappings 
@@ -338,9 +338,9 @@ int main (int argc, char **argv)
   prussdrv_exit ();
 
   // Now start the server; wait for client; dump data; return here and exit
-  printf("Starting the server...\n");
+  printf("Starting the server...\n\n");
   doServer(portno);
-  printf("Data successfully dumped. Program ending.\n\n");
+  printf("Data successfully dumped. Program complete.\n\n");
 
   return EXIT_SUCCESS;
 }

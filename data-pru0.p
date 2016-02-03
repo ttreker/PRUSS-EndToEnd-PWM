@@ -23,6 +23,7 @@ LBCO  r10, CONST_PRUSHAREDRAM, 0, 8
 // Low count is in R0, High count is in R1. Zero them.
 ZERO  &r0, 8
 
+// Sync up on a clean low-to-high transition
 WBC   r31,3
 WBS   r31,3
 
