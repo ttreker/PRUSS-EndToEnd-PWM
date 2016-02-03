@@ -5,7 +5,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h> 
+#include <netdb.h>
 
 // Struct to hold a sample
 typedef struct sample_st
@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
   // Extract the port argument and open Internet socket
   portno = atoi(argv[2]);
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0) 
+  if (sockfd < 0)
     syserror("\nERROR opening socket");
 
   // Look up the host
@@ -92,14 +92,14 @@ int main(int argc, char *argv[])
 
   // Tell the host to "GO"
   n = write(sockfd,"GO",strlen("GO"));
-  if (n < 0) 
+  if (n < 0)
   {
     close(sockfd);
     free(buffer);
     syserror("\nERROR writing command \"GO\" to socket");
   }
 
-  // Read the data in a loop, one chunk at a time, until all 
+  // Read the data in a loop, one chunk at a time, until all
   // samples have been read.
   int cnt = 0;
   int countleft = count;
@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
   {
     n = read(sockfd,bptr,countleft);
     printf("Bytes read: 0x%X\n", n);
-    if (n < 0) 
+    if (n < 0)
     {
       close(sockfd);
       free(buffer);
@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 
   // Tell host all data received so it can close its socket.
   n = write(sockfd,"DONE",strlen("DONE"));
-  if (n < 0) 
+  if (n < 0)
   {
     close(sockfd);
     free(buffer);

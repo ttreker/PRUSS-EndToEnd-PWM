@@ -1,4 +1,4 @@
-PRUSS-EndToEnd-PWM Version 0.50
+PRUSS-EndToEnd-PWM Version 0.60
 (C) Copyright 2016 by Christopher C. Mills:
 
 This program is distributed under the terms of the GNU General Public
@@ -88,14 +88,18 @@ Device Tree Overlay:
    for details on how to go about doing this. Check out his web site for
    updated details on this topic.
 
-In addition to a Makefile, a PASM header file, and a device tree overlay
-() and its build script, this demonstration consists
-primarily of four modules:
+In addition to a Makefile, a PASM header file, and a device tree overlay and
+its build script, this demonstration consists primarily of four modules:
 
    pruss-ete.c  (server and PRUSS manager)
    client-ete.c (client compilable on any system including the BBB)
    data-pru0.p  (PRU 0 code for PWM sample capturing)
    ddr-pru1.p   (PRU 1 code for dumping samples to DDR) 
+
+There is also included a Windows client written under the .NET framework in C#.
+This can be used in place of the client above:
+
+   win-client-ete.cs (requires a platform running .NET)
 
 The DDR buffer is setup by the uio_pruss kernel module. This module is loaded by
 default upon BBB boot and this buffer (called External RAM by uio_pruss
@@ -145,7 +149,7 @@ pruss-ete (continues):
        TCP stream.
    13) It then shuts down.
 
-client-ete:
+client-ete or win-client-ete:
    1) Connects to the server: Its port was passed on its command line.
    2) Immediately reads the stream for the sample data size.
    3) Upon receipt of the size, sends a "GO" string to the server.
@@ -191,15 +195,6 @@ Practical Use:
    3) Analyze the data in a spreadsheet for variance or graph the deviations
       against time.
 
-RELEASE NOTES for pruss-ete
---------------------------------------------------------------------------------
-Version 0.50: Initial Project Creation
-	
-CONTRIBUTORS
---------------------------------------------------------------------------------
-Christopher C. Mills ---- Linux C and PRUSS  source modules; design
-Ram Radhakrishnan ------- PWM circuit, Windows C client; design
-
 BUILD
 --------------------------------------------------------------------------------
 
@@ -243,6 +238,14 @@ Note: This module must be linked to the prussdrv library which is installed
       available for download on Github.
 
 
+WINDOWS CLIENT BUILD
+--------------------------------------------------------------------------------
+If you prefer to run the client from a Windows PC, you can try out the C# .NET
+Console Application provided. It has been compiled under Visual Studio 2010
+Professional as well as Visual Studio Commumity 2015 using Target framework
+3.5. or 4.5. 
+
+
 INSTALLATION
 --------------------------------------------------------------------------------
 Other than the device tree overlay described above, no install is required
@@ -258,20 +261,94 @@ Note: The server (pruss-ete) must be run with root privileges.
      pruss-ete <port number>
 
    where <port number> is any desired unused port (maybe arbitrarily 51717).
-3) Wait for the PRUSS work to complete. This is indicated by the message:
+   The server will print a series of informational and status messages.
+3) Wait for the PRUSS work to complete and the TCP server to start. This will
+   be indicated by the message:
 
-      All Samples Dumped. Received event count...
+      Starting the server...
 
-   Then the server will have started.
-4) When the server has started, start the client with:
+4) When the server has indicated that it has started, start the client with:
 
-     client-ete <port number>
+     client-ete <hostname or ip> <port number>
 
-   where the port number is the same as for the server.
-5) The client and server should quickly complete and shutdown.
+   where the port number is the same as for the server. If using the Windows
+   client, it can be started similarly with:
+
+     win-client-ete <hostname or ip> <port number>
+
+5) The client and server should quickly complete and shutdown, again, after
+   displaying a series of informational and status messages.
 6) Check for the file
 
       tcpcap.dat
 
    in the client's startup folder.
     
+
+TESTING
+--------------------------------------------------------------------------------
+Initial development was done using the FG085 miniDDS Function Generator. It was
+run at a speed on the order of 10KHz.
+
+The following is an account of a more robust test setup used to test the code
+after development had been completed:
+
+For the test set up a simple pulse generator, using a ChipKit MAX32
+Microcontroller board and a mixture of C and assembly to exploit the high
+speed I/O toggling capability of the Microchip PIC32MX795F512H (80MHz), was
+used. This allowed generating pulses as short as 60 nanoSeconds. The limits of
+the system were close to being tested. 
+
+The table below shows the results of capturing pulse trains using a variety of
+values:
+
+               |             | Sample
+               |  (Duty Cyc) | Counts
+Pulse Duration | (Frequency) |(in Hex)
+---------------------------------------
+               |             |
+(-ve) 3960 nS  |      (33%)  | 0000018C
+(+ve) 1950 nS  |  (169 KHz)  | 000000C5 
+               |             |
+(-ve) 465 nS   |      (42%)  | 0000002E
+(+ve) 335 nS   | (1.25 MHz)  | 0000001E 
+               |             |
+(-ve) 61.5 nS  |      (50%)  | 00000006
+(+ve) 61.5 nS  |  (8.1 MHz)  | 00000003 
+
+
+DISCUSSION
+--------------------------------------------------------------------------------
+The aim of this project was to keep the code from being obscure, while
+demonstrating a "complete" system involving the PRUSS that may have a hint of
+being practical. It is probably possible to finetune the PRUSS code to be
+faster or more accurate. For instance, the high counts have a systematic error
+that reduces their counts (likely by a fixed amount) as a result of all the
+testing overhead, and data transfer. The BeagleLogic project claims operating
+speeds of up to 100MHz, 2 orders of magnitude faster than the above results.
+
+Addressing these issues to improve performance is likely to complicate the code
+in a manner that would make it less digestable. Consequently, such
+optimizations were avoided on this project. Instead, the principle idea has
+been to provide a starting point for investigating these kinds of
+optimizations. It is up to the user to explore further efficiency
+possibilities. Some of these may include:
+
+   -- Cycle counting blocks of code using the PRUSS resources supporting this.
+      (See the PRUSS documentation for use of the cycle and stall count
+       registers.)
+   -- Exploring alternative algorithms.
+   -- Using scratchpad PRU-to-PRU signalling rather than an interrupt to
+      combine signalling and data transfer in one step via the single cycle
+      broadside bus instructions (XIN, XOUT).
+
+In addition, on the Linux/C side improvements in buffering could be achieved by
+writing a custom kernel module which, among other things, could dramatically
+improve buffer size. (Derek Molloy is in the process of completing a four part
+series on the web for doing just this.)
+
+CONTRIBUTORS
+--------------------------------------------------------------------------------
+Christopher C. Mills ---- Linux C and PRUSS  source modules; design
+Ram Radhakrishnan ------- PWM circuit, Windows C client; design
+
