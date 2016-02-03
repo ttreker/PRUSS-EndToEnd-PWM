@@ -1,0 +1,23 @@
+If you prefer to run the client from a Windows PC, you can try out the C# .NET Console Application provided.
+I have compiled it under Visual Studio 2010 Professional as well as Visual Studio Commumity 2015 using 
+Target framework 3.5. or 4.5. 
+
+For the test set up, I created a simple pulse generator using a ChipKit MAX32 Microcontroller board 
+using a mixture of C and assembly to exploit the high speed I/O toggling capability of the Microchip 
+PIC32MX795F512H (80MHz). This allowed me to generate pulses as short as 60 nanoSeconds.
+This lets us almost reach the limits of the system. 
+
+The table below shows the results of capturing pulse trains using a variety of values.
+
+Pulse Duration       Hex Value
+
+(-ve) 3960 nS        0000018C
+(+ve) 1950 nS        000000C5 
+
+(-ve) 465 nS         0000002E
+(+ve) 335 nS         0000001E 
+
+(-ve) 61.5 nS        00000006
+(+ve) 61.5 nS        00000003 
+
+
