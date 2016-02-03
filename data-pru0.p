@@ -17,7 +17,7 @@ MOV   r1, CTPPR_0_P0
 ST32  r0, r1         // (Note: STXX instructions are macros from the header)
 
 // Load 2 values from shared RAM into Registers R10/R11
-// Only the R11, the sample count, is used by PRU 0 
+// Only the R11, the sample count, is used by PRU 0
 LBCO  r10, CONST_PRUSHAREDRAM, 0, 8
 
 // Low count is in R0, High count is in R1. Zero them.

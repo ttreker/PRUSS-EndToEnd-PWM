@@ -15,7 +15,7 @@
 #include <ctype.h>
 #include <termios.h>
 #include <sys/mman.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -88,7 +88,7 @@ int dumpSamples(int newsockfd, unsigned int dataSize) {
 
   // Map the physical memory block location to a local process pointer
   map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, targetMemBlock);
-  if(map_base == (void *) -1) 
+  if(map_base == (void *) -1)
   {
     fprintf(stderr,"\nFailed to map base address of uio_pruss extended RAM buffer\n");
     fflush(stderr);
@@ -218,7 +218,7 @@ void doServer(int portno)
 
   // Get a handle on a socket
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0) 
+  if (sockfd < 0)
     syserror("\nERROR opening socket");
 
   // Initialize the server structure that specifies, amongy other things,
@@ -300,7 +300,7 @@ int main (int argc, char **argv)
   // PRUSS_INTC_INITDATA is found in pruss_intc_mapping.h
   tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
 
-  // Data for shared memory. Both PRUs need access. 
+  // Data for shared memory. Both PRUs need access.
   uint32_t  uioBufMetaD[2];
   uioBufMetaD[0] = readFileValue(MMAP1_LOC "addr");
   uint32_t bufSize = readFileValue(MMAP1_LOC "size");
@@ -314,7 +314,7 @@ int main (int argc, char **argv)
   prussdrv_open (PRU_EVTOUT_0);  // Populates the internal structure with pointers and params
 
   // Write uio_pruss kernel buffer metadata to PRUSS shared memory
-  prussdrv_pru_write_memory(PRUSS0_SHARED_DATARAM, 0, uioBufMetaD, 8);  
+  prussdrv_pru_write_memory(PRUSS0_SHARED_DATARAM, 0, uioBufMetaD, 8);
 
   // Map the PRU's interrupts
   prussdrv_pruintc_init(&pruss_intc_initdata);
@@ -331,7 +331,7 @@ int main (int argc, char **argv)
   printf("All samples written to DDR buffer. (UIO interrupt count: %d).\n\n", n);
   prussdrv_pru_clear_event (PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
-  // Disable PRU and close memory mappings 
+  // Disable PRU and close memory mappings
   prussdrv_pru_disable(PRU0);
   prussdrv_pru_disable(PRU1);
 

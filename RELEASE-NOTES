@@ -1,0 +1,30 @@
+RELEASE NOTES for the PRUSS-EndToEnd-PWM Project Version 0.60
+(C) Copyright 2016 by Christopher C. Mills:
+--------------------------------------------------------------------------------
+Version 0.50: Initial Project Creation
+Version 0.57:
+
+    - pruss-ete.c and client-etc.c:
+      - Added a final "DONE" client-server handshake to address
+        flakiness in communication.
+      - Reviewed and cleaned up error handling.
+      - Changed from exit(0) to exit(EXIT_FAILURE) in error() helper
+        function.
+      - Changed routine error() to syserror() to clearify its use as a
+        reporter of system, and not program errors.
+      - Clarified and added some comments.
+      - Cleaned up some error messages.
+      - Reformatted printout of DDR buffer parameters in server.
+      - Refined many print statements and added some to clarify system state
+        during run.
+    
+    - data-pru0.p and ddr-pru1.p:
+      - Cleaned up some comments.
+      - Removed (or commented out) debug code.
+      - Removed an extraneous instruction in PRU 1 that waited to detect.
+        that the interrupt had cleared before waiting for the next.
+    
+    - README: Clarified some points; changed reference to "Extended RAM"
+              to "External RAM"
+
+Version 0.60:
