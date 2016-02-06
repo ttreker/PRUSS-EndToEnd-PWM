@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
-namespace BBBTCPClient
+namespace BBBTest2
 {
   public class tcpClient
   {
@@ -12,21 +12,27 @@ namespace BBBTCPClient
     private bool rcvStarted = false;
     private Int32 blockSize = 0;
     private Int32 totalBytesReceived = 0;
-    public static  string REMOTE_IP = "";
+    public static string REMOTE_IP = "";
     public static bool done = false;
     public static string fileNamePrefix;
 
     public static void Main(String[] argv)
     {
-      fileNamePrefix = GenerateFileName();
-      REMOTE_IP = argv[0];
-      TCP_PORT = int.Parse(argv[1]);
-      tcpClient client = new tcpClient();
-      client.clientProcess(REMOTE_IP);
-      Console.WriteLine("Receive operation Complete.");
-      Console.WriteLine("Data saved to file: " + fileNamePrefix.ToString());
-      Console.WriteLine("Press any Key to Exit...");
-      Console.ReadLine();
+      if (argv.Length != 2)
+      {
+        Console.WriteLine("Restart with two parameters: <remote server IP Address> & <TCP port> ... example: 192.168.20.90 5001\n");
+      }
+      else
+      {
+        fileNamePrefix = GenerateFileName();
+        REMOTE_IP = argv[0];
+        TCP_PORT = int.Parse(argv[1]);
+        tcpClient client = new tcpClient();
+        client.clientProcess(REMOTE_IP);
+        Console.WriteLine("Receive operation Complete.");
+        Console.WriteLine("Data saved to file: " + fileNamePrefix.ToString());
+        Console.WriteLine("Press any Key to Exit...\n");
+      }
     }
     public void clientProcess(String serverName)
     {
@@ -63,7 +69,7 @@ namespace BBBTCPClient
             int nBytesReceived = tcpStream.Read(received, 0, received.Length);
             totalBytesReceived += nBytesReceived;
             BinarySave(fileNamePrefix, received, nBytesReceived);
-            if (totalBytesReceived == blockSize)done = true;
+            if (totalBytesReceived == blockSize) done = true;
           }
         }
         if (tcpStream.CanWrite && done) // Acknowledge full receipt by sending "DONE" and shut down
